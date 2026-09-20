@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Dungeon Survivor</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b12;color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{touch-action:none}
+#game{display:block;width:100vw;height:100vh;background:#0b0f18;cursor:crosshair}
+#hud{position:fixed;inset:0;pointer-events:none}
+.panel{background:rgba(10,14,24,.82);border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.35);backdrop-filter:blur(6px);border-radius:14px}
+#top{position:absolute;left:18px;top:16px;min-width:285px;padding:12px 14px}
+.row{display:flex;justify-content:space-between;gap:12px;font-size:13px;opacity:.9}
+.label{color:#9aa6bf}
+.bar{height:12px;background:#202738;border-radius:999px;overflow:hidden;margin-top:7px}
+.fill{height:100%;transition:width .12s linear}
+#hpFill{background:linear-gradient(90deg,#d94b67,#ff7c78)}
+#xpFill{background:linear-gradient(90deg,#58b8ff,#9a7cff)}
+#bossHud{display:none;position:absolute;left:50%;top:16px;transform:translateX(-50%);width:min(560px,65vw);padding:10px 14px}
+#bossFill{background:linear-gradient(90deg,#b547ff,#ff6db3)}
+#center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+#start,#gameOver,#levelUp{display:none;pointer-events:auto;padding:30px;max-width:640px;text-align:center}
+#start{display:block}
+h1{margin:0 0 8px;font-size:46px;letter-spacing:2px}
+h2{margin:0 0 10px;font-size:30px}
+.sub{color:#aab4ca;margin:8px 0 20px;line-height:1.6}
+button{border:0;border-radius:12px;padding:13px 20px;background:#f0b35b;color:#121521;font-weight:800;font-size:15px;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+kbd{background:#20283a;border:1px solid #38425a;border-bottom-width:3px;padding:2px 6px;border-radius:6px}
+#levelUp .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+.card{padding:15px;text-align:left;background:#151b2a;border:1px solid #303b56;border-radius:12px;cursor:pointer}
+.card:hover{border-color:#f0b35b;transform:translateY(-2px)}
+.card b{display:block;margin-bottom:7px}
+.card small{color:#9aa6bf;line-height:1.4}
+#tip{position:absolute;right:18px;bottom:16px;padding:10px 12px;color:#9aa6bf;font-size:12px}
+#touch{display:none;position:fixed;inset:0;pointer-events:none}
+.stick{position:absolute;left:22px;bottom:22px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);pointer-events:auto}
+.knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(240,179,91,.55)}
+#attackTouch{position:absolute;right:26px;bottom:40px;width:92px;height:92px;border-radius:50%;background:rgba(240,179,91,.2);border:1px solid rgba(240,179,91,.6);display:grid;place-items:center;font-size:12px;pointer-events:auto}
+@media (orientation:portrait){#game{min-width:100vw}#tip{display:none}#touch{display:block}.panel{transform:scale(.9);transform-origin:top left}}
+</style>
+</head>
+<body>
+<canvas id="game" width="1280" height="720"></canvas>
+<div id="hud">
+  <div id="top" class="panel">
+    <div class="row"><span>生命</span><b id="hpText">100 / 100</b></div>
+    <div class="bar"><div id="hpFill" class="fill" style="width:100%"></div></div>
+    <div class="row" style="margin-top:8px"><span>经验 <span id="levelText">Lv.1</span></span><b id="xpText">0 / 35</b></div>
+    <div class="bar"><div id="xpFill" class="fill" style="width:0%"></div></div>
+    <div class="row" style="margin-top:10px"><span>地牢层数</span><b id="floorText">1</b></div>
+    <div class="row"><span>金币</span><b id="goldText">0</b></div>
+  </div>
+  <div id="bossHud" class="panel">
+    <div class="row"><span id="bossName">深渊领主</span><b id="bossHpText"></b></div>
+    <div class="bar"><div id="bossFill" class="fill" style="width:100%"></div></div>
+  </div>
+  <div id="tip" class="panel">WASD 移动 · 鼠标左键攻击 · Shift 闪避 · 清空房间后进入下一间</div>
+  <div id="center">
+    <div id="start" class="panel">
+      <h1>DUNGEON<br>SURVIVOR</h1>
+      <div class="sub">横屏地牢闯关 · 清房 · 升级 · Boss</div>
+      <button id="startBtn">开始冒险</button>
+      <div class="sub" style="font-size:12px;margin:16px 0 0">建议使用电脑浏览器体验。也支持触屏移动。</div>
+    </div>
+    <div id="gameOver" class="panel">
+      <h2>冒险结束</h2>
+      <div class="sub" id="overStats"></div>
+      <button id="restartBtn">重新挑战</button>
+    </div>
+    <div id="levelUp" class="panel">
+      <h2>升级！</h2>
+      <div class="sub">选择一项强化。战斗会暂时暂停。</div>
+      <div class="choices" id="choices"></div>
+    </div>
+  </div>
+</div>
+<div id="touch">
+  <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+  <div id="attackTouch">攻击</div>
+</div>
+<script>
+(() => {
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=C.width,H=C.height;
+const ui={
+ hpText:document.getElementById('hpText'),hpFill:document.getElementById('hpFill'),
+ xpText:document.getElementById('xpText'),xpFill:document.getElementById('xpFill'),
+ levelText:document.getElementById('levelText'),floorText:document.getElementById('floorText'),
+ goldText:document.getElementById('goldText'),bossHud:document.getElementById('bossHud'),
+ bossName:document.getElementById('bossName'),bossHpText:document.getElementById('bossHpText'),bossFill:document.getElementById('bossFill'),
+ start:document.getElementById('start'),gameOver:document.getElementById('gameOver'),levelUp:document.getElementById('levelUp'),
+ choices:document.getElementById('choices'),overStats:document.getElementById('overStats')
+};
+const keys={},mouse={x:W/2,y:H/2,down:false};
+let touchMove={x:0,y:0},touchAttack=false;
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key==='Shift')keys.shift=true});
+window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;if(e.key==='Shift')keys.shift=false});
+C.addEventListener('mousemove',e=>{const r=C.getBoundingClientRect();mouse.x=(e.clientX-r.left)*W/r.width;mouse.y=(e.clientY-r.top)*H/r.height});
+C.addEventListener('mousedown',e=>{if(e.button===0)mouse.down=true});
+window.addEventListener('mouseup',()=>mouse.down=false);
+const stick=document.getElementById('stick'),knob=document.getElementById('knob'),attackTouch=document.getElementById('attackTouch');
+let stickActive=false;
+stick.addEventListener('pointerdown',e=>{stickActive=true;stick.setPointerCapture(e.pointerId);updateStick(e)});
+stick.addEventListener('pointermove',e=>{if(stickActive)updateStick(e)});
+stick.addEventListener('pointerup',()=>{stickActive=false;touchMove.x=touchMove.y=0;knob.style.left='35px';knob.style.top='35px'});
+function updateStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const m=Math.hypot(dx,dy)||1,d=Math.min(42,m);touchMove.x=dx/m;touchMove.y=dy/m;knob.style.left=(35+touchMove.x*d/1.0)+'px';knob.style.top=(35+touchMove.y*d/1.0)+'px'}
+attackTouch.addEventListener('pointerdown',()=>touchAttack=true);
+window.addEventListener('pointerup',()=>touchAttack=false);
+
+const rand=(a,b)=>Math.random()*(b-a)+a;
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+let state='menu',floor=1,roomIndex=0,rooms=[],room,player,projectiles=[],particles=[],pickups=[],last=0,shake=0;
+let totalKills=0,totalGold=0;
+
+function reset(){
+ floor=1;roomIndex=0;totalKills=0;totalGold=0;
+ player={x:W/2,y:H/2,r:18,hp:100,maxHp:100,speed:250,damage:24,attackCd:.34,attackTimer:0,attackRange:72,level:1,xp:0,nextXp:35,gold:0,inv:0,dodgeCd:0,dodgeTimer:0,crit:.08};
+ generateFloor();
+ state='play';ui.start.style.display='none';ui.gameOver.style.display='none';
+}
+function generateFloor(){
+ rooms=[];
+ const count=(floor%5===0)?2:3;
+ for(let i=0;i<count;i++){
+   const isBoss=(floor%5===0&&i===count-1);
+   rooms.push(createRoom(isBoss));
+ }
+ room=rooms[0];roomIndex=0;spawnRoom();
+}
+function createRoom(boss){
+ const enemies=[];
+ const n=boss?0:Math.min(4+floor*2,14);
+ for(let i=0;i<n;i++)enemies.push(makeEnemy(false));
+ if(boss)enemies.push(makeEnemy(true));
+ return {cleared:false,boss,enemies,spawned:true};
+}
+function makeEnemy(isBoss){
+ const angle=rand(0,Math.PI*2),rad=rand(170,260);
+ const p={x:W/2+Math.cos(angle)*rad,y:H/2+Math.sin(angle)*rad};
+ const scale=1+floor*.12;
+ return {
+   x:clamp(p.x,120,W-120),y:clamp(p.y,125,H-105),
+   r:isBoss?38:20,hp:(isBoss?520:70)*scale,maxHp:(isBoss?520:70)*scale,
+   speed:isBoss?75:105+floor*2,damage:isBoss?20:9+floor*.7,
+   cd:rand(.1,.8),atk:0,isBoss,hitFlash:0,phase:0
+ };
+}
+function spawnRoom(){
+ room=rooms[roomIndex];projectiles=[];particles=[];pickups=[];
+ player.x=W/2;player.y=H/2;player.hp=Math.min(player.maxHp,player.hp+18);player.inv=.5;
+ room.enemies.forEach(e=>{e.x=clamp(e.x,100,W-100);e.y=clamp(e.y,115,H-95);});
+}
+function nextRoom(){
+ roomIndex++;
+ if(roomIndex>=rooms.length){floor++;generateFloor();return;}
+ spawnRoom();
+}
+function addXp(n){
+ player.xp+=n;
+ while(player.xp>=player.nextXp){
+   player.xp-=player.nextXp;player.level++;player.nextXp=Math.floor(player.nextXp*1.28);
+   pauseForLevelUp(); return;
+ }
+}
+const upgrades=[
+ {name:'锋利之刃',desc:'攻击伤害 +25%',apply:()=>player.damage*=1.25},
+ {name:'迅捷身法',desc:'移动速度 +18%',apply:()=>player.speed*=1.18},
+ {name:'生命强化',desc:'最大生命 +25，并回复 25',apply:()=>{player.maxHp+=25;player.hp=Math.min(player.maxHp,player.hp+25)}},
+ {name:'狂战节奏',desc:'攻击间隔 -20%',apply:()=>player.attackCd*=.8},
+ {name:'致命一击',desc:'暴击率 +8%',apply:()=>player.crit+=.08},
+ {name:'吸血意志',desc:'每次击杀回复 3 点生命',apply:()=>player.lifesteal=(player.lifesteal||0)+3}
+];
+function pauseForLevelUp(){
+ state='levelup';ui.levelUp.style.display='block';ui.choices.innerHTML='';
+ [...upgrades].sort(()=>Math.random()-.5).slice(0,3).forEach(u=>{
+  const d=document.createElement('div');d.className='card';d.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
+  d.onclick=()=>{u.apply();state='play';ui.levelUp.style.display='none';};
+  ui.choices.appendChild(d);
+ });
+}
+function shoot(){
+ if(player.attackTimer>0)return;
+ const tx=mouse.x,ty=mouse.y;
+ let dx=tx-player.x,dy=ty-player.y;
+ if(touchAttack){dx=1;dy=0}
+ const m=Math.hypot(dx,dy)||1;dx/=m;dy/=m;
+ let dmg=player.damage*(Math.random()<player.crit?2:1);
+ projectiles.push({x:player.x+dx*25,y:player.y+dy*25,vx:dx*580,vy:dy*580,r:6,dmg,life:.75});
+ player.attackTimer=player.attackCd;
+ burst(player.x+dx*24,player.y+dy*24,4,'spark');
+}
+function damagePlayer(n){
+ if(player.inv>0||state!=='play')return;
+ player.hp-=n;player.inv=.55;shake=8;burst(player.x,player.y,12,'blood');
+ if(player.hp<=0){player.hp=0;state='over';ui.gameOver.style.display='block';ui.overStats.innerHTML='到达第 '+floor+' 层 · 击杀 '+totalKills+' · 金币 '+totalGold;}
+}
+function burst(x,y,n,type){for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-170,170),vy:rand(-170,170),life:rand(.2,.55),r:rand(2,5),type})}
+function killEnemy(e){
+ totalKills++;player.gold+=e.isBoss?80:5;totalGold=player.gold;addXp(e.isBoss?100:12);if(player.lifesteal)player.hp=Math.min(player.maxHp,player.hp+player.lifesteal);
+ if(Math.random()<.45&&!e.isBoss)pickups.push({x:e.x,y:e.y,type:'gold',value:10+Math.floor(rand(0,10))});
+ burst(e.x,e.y,e.isBoss?36:14,'death');shake=e.isBoss?16:5;
+ if(e.isBoss){room.cleared=true;return;}
+ if(room.enemies.every(x=>x.hp<=0)){room.cleared=true;burst(W/2,H/2,35,'spark')}
+}
+function update(dt){
+ if(state!=='play')return;
+ player.inv=Math.max(0,player.inv-dt);player.attackTimer=Math.max(0,player.attackTimer-dt);player.dodgeCd=Math.max(0,player.dodgeCd-dt);
+ let mx=(keys.d?1:0)-(keys.a?1:0),my=(keys.s?1:0)-(keys.w?1:0);
+ if(touchMove.x||touchMove.y){mx=touchMove.x;my=touchMove.y}
+ const mm=Math.hypot(mx,my)||1;
+ if(keys.shift&&player.dodgeCd<=0){player.dodgeTimer=.16;player.dodgeCd=1.1;player.inv=.22}
+ if(player.dodgeTimer>0){player.dodgeTimer-=dt;player.x+=mx/mm*620*dt;player.y+=my/mm*620*dt}
+ else {player.x+=mx/mm*player.speed*dt*(mx||my?1:0);player.y+=my/mm*player.speed*dt*(mx||my?1:0)}
+ player.x=clamp(player.x,70,1210);player.y=clamp(player.y,90,650);
+ if(mouse.down||touchAttack)shoot();
+ room.enemies.forEach(e=>{
+   if(e.hp<=0)return;
+   e.hitFlash=Math.max(0,e.hitFlash-dt);e.cd=Math.max(0,e.cd-dt);
+   let dx=player.x-e.x,dy=player.y-e.y,m=Math.hypot(dx,dy)||1;
+   if(m>e.r+player.r+12){e.x+=dx/m*e.speed*dt;e.y+=dy/m*e.speed*dt}
+   if(m<e.r+player.r+7&&e.cd<=0){damagePlayer(e.damage);e.cd=e.isBoss?.9:1.0}
+   if(e.isBoss&&m<420)e.phase+=dt;
+ });
+ for(let i=projectiles.length-1;i>=0;i--){let p=projectiles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
+   let hit=false;
+   for(const e of room.enemies)if(e.hp>0&&Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r){e.hp-=p.dmg;e.hitFlash=.12;burst(p.x,p.y,5,'spark');hit=true;if(e.hp<=0)killEnemy(e);break}
+   if(hit||p.life<=0||p.x<0||p.x>W||p.y<0||p.y>H)projectiles.splice(i,1);
+ }
+ for(let i=pickups.length-1;i>=0;i--){const p=pickups[i];if(dist(p,player)<28){player.gold+=p.value;totalGold=player.gold;burst(p.x,p.y,8,'spark');pickups.splice(i,1)}}
+ for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97;p.life-=dt;if(p.life<=0)particles.splice(i,1)}
+ shake=Math.max(0,shake-dt*24);
+ if(room.cleared&&player.x>1120){nextRoom()}
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ const s=shake?rand(-shake,shake):0;ctx.save();ctx.translate(s,s);
+ drawRoom();drawPickups();drawEnemies();drawPlayer();drawProjectiles();drawParticles();
+ if(room.cleared){ctx.fillStyle='rgba(110,220,170,.18)';ctx.fillRect(1130,250,90,220);ctx.fillStyle='#9af0c0';ctx.font='700 16px system-ui';ctx.textAlign='center';ctx.fillText('出口',1175,235);ctx.textAlign='left'}
+ ctx.restore();updateUI();
+}
+function drawRoom(){
+ const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#111827');g.addColorStop(1,'#0b0f18');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle='rgba(255,255,255,.035)';ctx.lineWidth=1;
+ for(let x=40;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,72);ctx.lineTo(x,H-40);ctx.stroke()}
+ for(let y=80;y<H-40;y+=50){ctx.beginPath();ctx.moveTo(40,y);ctx.lineTo(W-40,y);ctx.stroke()}
+ ctx.fillStyle='#171d2a';ctx.fillRect(45,70,W-90,H-110);
+ ctx.strokeStyle='#39445f';ctx.lineWidth=3;ctx.strokeRect(45,70,W-90,H-110);
+ ctx.fillStyle='rgba(240,179,91,.05)';ctx.fillRect(70,95,W-140,H-160);
+ ctx.fillStyle='#7f8ba7';ctx.font='600 14px system-ui';ctx.fillText('FLOOR '+floor+'  ·  ROOM '+(roomIndex+1)+' / '+rooms.length,62,52);
+ if(!room.cleared){ctx.fillStyle='#d5dbea';ctx.font='600 13px system-ui';ctx.fillText('击败房间内全部敌人以解锁出口',62,678)}
+ else {ctx.fillStyle='#9af0c0';ctx.fillText('房间已清空 · 向右侧出口前进',62,678)}
+}
+function drawPlayer(){
+ ctx.save();ctx.translate(player.x,player.y);
+ const a=Math.atan2(mouse.y-player.y,mouse.x-player.x);ctx.rotate(a);
+ ctx.fillStyle='#0b0f18';ctx.beginPath();ctx.arc(0,0,22,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle=player.inv>0?'#fff':'#61b7ff';ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#d9efff';ctx.fillRect(9,-4,24,8);ctx.restore();
+}
+function drawEnemies(){
+ room.enemies.forEach(e=>{if(e.hp<=0)return;ctx.save();ctx.translate(e.x,e.y);
+   ctx.fillStyle=e.hitFlash>0?'#fff':(e.isBoss?'#bf5cff':'#c95b63');ctx.beginPath();ctx.arc(0,0,e.r,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-e.r*.45,-e.r*.3);ctx.lineTo(e.r*.45,e.r*.3);ctx.stroke();
+   ctx.fillStyle='#0b0f18';ctx.beginPath();ctx.arc(-e.r*.35,-e.r*.12,3,0,Math.PI*2);ctx.arc(e.r*.35,-e.r*.12,3,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle='#2a3042';ctx.fillRect(-e.r,-e.r-13,e.r*2,5);ctx.fillStyle=e.isBoss?'#d870ff':'#eb7070';ctx.fillRect(-e.r,-e.r-13,e.r*2*(e.hp/e.maxHp),5);
+   ctx.restore();
+ });
+}
+function drawProjectiles(){projectiles.forEach(p=>{ctx.fillStyle='#ffd28a';ctx.shadowBlur=12;ctx.shadowColor='#f0b35b';ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0})}
+function drawPickups(){pickups.forEach(p=>{ctx.fillStyle='#f0b35b';ctx.beginPath();ctx.arc(p.x,p.y,9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#20170b';ctx.font='700 9px system-ui';ctx.textAlign='center';ctx.fillText('$',p.x,p.y+3);ctx.textAlign='left'})}
+function drawParticles(){particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life*2);ctx.fillStyle=p.type==='blood'?'#ef6572':'#f0b35b';ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1})}
+function updateUI(){
+ const pct=player.hp/player.maxHp, xp=player.xp/player.nextXp;ui.hpText.textContent=Math.ceil(player.hp)+' / '+Math.ceil(player.maxHp);ui.hpFill.style.width=(pct*100)+'%';
+ ui.xpText.textContent=Math.floor(player.xp)+' / '+player.nextXp;ui.xpFill.style.width=(xp*100)+'%';ui.levelText.textContent='Lv.'+player.level;ui.floorText.textContent=floor;ui.goldText.textContent=player.gold;
+ const boss=room?.enemies.find(e=>e.isBoss&&e.hp>0);ui.bossHud.style.display=boss?'block':'none';if(boss){ui.bossName.textContent='深渊领主';ui.bossHpText.textContent=Math.ceil(boss.hp)+' / '+Math.ceil(boss.maxHp);ui.bossFill.style.width=(boss.hp/boss.maxHp*100)+'%'}
+}
+function loop(t){const dt=Math.min(.033,(t-last)/1000||0);last=t;if(state==='play')update(dt);draw();requestAnimationFrame(loop)}
+document.getElementById('startBtn').onclick=reset;
+document.getElementById('restartBtn').onclick=reset;
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
