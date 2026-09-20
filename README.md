@@ -33,3 +33,6 @@
 - 音效与背景音乐
 - 存档
 - 手机端适配
+
+
+Deployment: GitHub Pages via Actions.
